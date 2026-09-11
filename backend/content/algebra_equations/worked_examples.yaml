@@ -1,0 +1,47 @@
+# Shown when she chooses "see why" after a wrong answer. Kept deliberately
+# short — one idea, one worked line. A wall of text doesn't get read.
+
+simplifying_expressions:
+  title: Count the x's, count the numbers
+  explanation: x-terms and plain numbers never mix — combine each separately.
+  example: 3x + 5x - 2 → 8 x's, one -2 left over → 8x - 2.
+
+solving_linear_equations:
+  title: An equation is a balance
+  explanation: >
+    Whatever you do to one side, do to the other. Peel away everything
+    until x stands alone.
+  example: 3x + 5 = 20 → 3x = 15 → x = 5.
+
+factorising_common_factor:
+  title: Factorising undoes multiplying
+  explanation: >
+    Pull out the biggest number that divides every term. Expand your
+    answer back out to check it.
+  example: 6x + 9 → both divisible by 3 → 3(2x + 3).
+
+factorising_quadratics:
+  title: Find two numbers that multiply and add
+  explanation: "x² + bx + c factors into (x+p)(x+q) exactly when p×q = c and p+q = b."
+  example: "x² + 5x + 6 → 2 and 3 (2×3=6, 2+3=5) → (x + 2)(x + 3)."
+
+solving_quadratic_equations:
+  title: Zero times anything is zero
+  explanation: >
+    Once factored, either bracket alone can be the zero one — each gives
+    a solution.
+  example: (x - 2)(x - 3) = 0 → x = 2 or x = 3.
+
+simultaneous_equations:
+  title: Two lines cross at exactly one point
+  explanation: >
+    One equation alone isn't enough info. The second pins down the single
+    (x, y) that satisfies both.
+  example: "x + y = 7 and x - y = 3 → add them: 2x = 10 → x = 5, y = 2."
+
+inequalities:
+  title: A negative flips the direction
+  explanation: >
+    Multiplying or dividing by a negative reverses which side is bigger —
+    so the inequality sign flips too.
+  example: "-2x + 3 < 11 → -2x < 8 → x > -4 (flipped, ÷ by -2)."

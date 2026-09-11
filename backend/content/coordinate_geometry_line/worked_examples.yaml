@@ -1,0 +1,54 @@
+# Shown when she chooses "see why" after a wrong answer. Kept deliberately
+# short — one idea, one worked line. A wall of text doesn't get read.
+
+slope_two_points:
+  title: Slope is just rise over run
+  explanation: >
+    Walk from one point to the other. Slope is how far you go up, divided
+    by how far you go across.
+  example: "(1, 2) to (4, 8): across 3, up 6. Slope = 6/3 = 2."
+
+slope_intercept_form:
+  title: y = mx + c is two facts about a line
+  explanation: >
+    m is the steepness, c is where it crosses the y-axis. Rearranging
+    doesn't change the line — it just makes those two facts easy to read.
+  example: 3x + y = 2 → y = -3x + 2. Slope -3, crosses at (0, 2).
+
+equation_given_point_slope:
+  title: A point plus a slope is the whole line
+  explanation: >
+    Every point on a line obeys y = mx + c. Plug in what you know, solve
+    for the one thing you don't.
+  example: "Slope 2 through (3, 1): 1 = 2(3) + c → c = -5. Line: y = 2x - 5."
+
+parallel_lines:
+  title: Parallel means same slope, different line
+  explanation: >
+    Same steepness, different starting point. Copy the slope, work out a
+    new c for the new point.
+  example: "y = 2x + 1, parallel through (4, 4): 4 = 2(4) + c → c = -4."
+
+perpendicular_lines:
+  title: Perpendicular is -1/m, not m × -1
+  explanation: >
+    Rotate a line 90° and rise/run swap AND one sign flips — that's a
+    negative reciprocal, not just a sign change.
+  example: "Slope 2 → rise 2, run 1 → rotate → rise 1, run -2 → slope -1/2, not -2."
+
+midpoint:
+  title: A midpoint is two averages
+  explanation: Average the x's, average the y's, separately. That's the whole method.
+  example: (0, 6) and (5, 5) → x-average 2.5, y-average 5.5 → midpoint (2.5, 5.5).
+
+distance:
+  title: Distance is Pythagoras in disguise
+  explanation: >
+    The gap between two points is a right-angled triangle's hypotenuse —
+    the horizontal and vertical gaps are the two legs.
+  example: (4, 3) to (1, -1) → legs 3 and 4 → distance = √(9 + 16) = 5.
+
+axis_intercepts:
+  title: An intercept is where one coordinate is zero
+  explanation: On the x-axis, y is always 0. Set y = 0 and solve for x.
+  example: "y = -8x - 8 → 0 = -8x - 8 → x = -1. Crosses at (-1, 0)."

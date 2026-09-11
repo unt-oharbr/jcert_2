@@ -1,0 +1,77 @@
+{
+  "simplifying_expressions": {
+    "title": "Count the x's, count the numbers",
+    "explanation": "x-terms and plain numbers never mix \u2014 combine each separately.",
+    "example": "3x + 5x - 2 \u2192 8 x's, one -2 left over \u2192 8x - 2."
+  },
+  "solving_linear_equations": {
+    "title": "An equation is a balance",
+    "explanation": "Whatever you do to one side, do to the other. Peel away everything until x stands alone.\n",
+    "example": "3x + 5 = 20 \u2192 3x = 15 \u2192 x = 5."
+  },
+  "factorising_common_factor": {
+    "title": "Factorising undoes multiplying",
+    "explanation": "Pull out the biggest number that divides every term. Expand your answer back out to check it.\n",
+    "example": "6x + 9 \u2192 both divisible by 3 \u2192 3(2x + 3)."
+  },
+  "factorising_quadratics": {
+    "title": "Find two numbers that multiply and add",
+    "explanation": "x\u00b2 + bx + c factors into (x+p)(x+q) exactly when p\u00d7q = c and p+q = b.",
+    "example": "x\u00b2 + 5x + 6 \u2192 2 and 3 (2\u00d73=6, 2+3=5) \u2192 (x + 2)(x + 3)."
+  },
+  "solving_quadratic_equations": {
+    "title": "Zero times anything is zero",
+    "explanation": "Once factored, either bracket alone can be the zero one \u2014 each gives a solution.\n",
+    "example": "(x - 2)(x - 3) = 0 \u2192 x = 2 or x = 3."
+  },
+  "simultaneous_equations": {
+    "title": "Two lines cross at exactly one point",
+    "explanation": "One equation alone isn't enough info. The second pins down the single (x, y) that satisfies both.\n",
+    "example": "x + y = 7 and x - y = 3 \u2192 add them: 2x = 10 \u2192 x = 5, y = 2."
+  },
+  "inequalities": {
+    "title": "A negative flips the direction",
+    "explanation": "Multiplying or dividing by a negative reverses which side is bigger \u2014 so the inequality sign flips too.\n",
+    "example": "-2x + 3 < 11 \u2192 -2x < 8 \u2192 x > -4 (flipped, \u00f7 by -2)."
+  },
+  "slope_two_points": {
+    "title": "Slope is just rise over run",
+    "explanation": "Walk from one point to the other. Slope is how far you go up, divided by how far you go across.\n",
+    "example": "(1, 2) to (4, 8): across 3, up 6. Slope = 6/3 = 2."
+  },
+  "slope_intercept_form": {
+    "title": "y = mx + c is two facts about a line",
+    "explanation": "m is the steepness, c is where it crosses the y-axis. Rearranging doesn't change the line \u2014 it just makes those two facts easy to read.\n",
+    "example": "3x + y = 2 \u2192 y = -3x + 2. Slope -3, crosses at (0, 2)."
+  },
+  "equation_given_point_slope": {
+    "title": "A point plus a slope is the whole line",
+    "explanation": "Every point on a line obeys y = mx + c. Plug in what you know, solve for the one thing you don't.\n",
+    "example": "Slope 2 through (3, 1): 1 = 2(3) + c \u2192 c = -5. Line: y = 2x - 5."
+  },
+  "parallel_lines": {
+    "title": "Parallel means same slope, different line",
+    "explanation": "Same steepness, different starting point. Copy the slope, work out a new c for the new point.\n",
+    "example": "y = 2x + 1, parallel through (4, 4): 4 = 2(4) + c \u2192 c = -4."
+  },
+  "perpendicular_lines": {
+    "title": "Perpendicular is -1/m, not m \u00d7 -1",
+    "explanation": "Rotate a line 90\u00b0 and rise/run swap AND one sign flips \u2014 that's a negative reciprocal, not just a sign change.\n",
+    "example": "Slope 2 \u2192 rise 2, run 1 \u2192 rotate \u2192 rise 1, run -2 \u2192 slope -1/2, not -2."
+  },
+  "midpoint": {
+    "title": "A midpoint is two averages",
+    "explanation": "Average the x's, average the y's, separately. That's the whole method.",
+    "example": "(0, 6) and (5, 5) \u2192 x-average 2.5, y-average 5.5 \u2192 midpoint (2.5, 5.5)."
+  },
+  "distance": {
+    "title": "Distance is Pythagoras in disguise",
+    "explanation": "The gap between two points is a right-angled triangle's hypotenuse \u2014 the horizontal and vertical gaps are the two legs.\n",
+    "example": "(4, 3) to (1, -1) \u2192 legs 3 and 4 \u2192 distance = \u221a(9 + 16) = 5."
+  },
+  "axis_intercepts": {
+    "title": "An intercept is where one coordinate is zero",
+    "explanation": "On the x-axis, y is always 0. Set y = 0 and solve for x.",
+    "example": "y = -8x - 8 \u2192 0 = -8x - 8 \u2192 x = -1. Crosses at (-1, 0)."
+  }
+}

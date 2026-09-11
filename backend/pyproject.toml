@@ -1,0 +1,23 @@
+[project]
+name = "axiom-backend"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aws-cdk-lib>=2.268.0",
+    "boto3>=1.43.91",
+    "constructs>=10.8.1",
+    "pyyaml>=6.0.3",
+    "sympy>=1.14.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.6",
+]
+
+[tool.pytest.ini_options]
+# Without this, pytest also tries to collect the test suites bundled inside
+# layer/ (sympy, mpmath) — that's staged Lambda-layer content, not ours.
+testpaths = ["tests"]

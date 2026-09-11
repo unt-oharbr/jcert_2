@@ -1,0 +1,8 @@
+{
+  "name": "axiom-backend-cdk-cli",
+  "private": true,
+  "description": "Pins the AWS CDK CLI used to deploy the Axiom backend (app itself is Python — see app.py)",
+  "devDependencies": {
+    "aws-cdk": "^2.1141.0"
+  }
+}

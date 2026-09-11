@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[oc]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# CDK
+backend/cdk.out/
+backend/node_modules/
+backend/layer/
+
+# Frontend (once scaffolded)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.*
+
+# Dependencies — huge, and rebuildable from a lockfile
+node_modules/
+venv/
+.venv/
+__pycache__/
+
+# Build output — regenerated on every deploy
+dist/
+build/
+.next/
+.cache/
+
+# Local noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
