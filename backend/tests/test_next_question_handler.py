@@ -62,12 +62,14 @@ def _event(body: dict[str, Any] | None = None) -> dict[str, Any]:
 def handler_module(monkeypatch):
     monkeypatch.setenv("QUESTIONS_TABLE", "test-questions")
     monkeypatch.setenv("PROGRESS_TABLE", "test-progress")
+    monkeypatch.setenv("SESSION_EVENTS_TABLE", "test-session-events")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
 
     spec = importlib.util.spec_from_file_location("next_question_handler_under_test", _HANDLER_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     sys.modules.pop(spec.name, None)  # don't leak into later tests' import caches
+    module._session_events_table = _FakeTable()  # default; T4 tests below override as needed
     return module
 
 
@@ -126,3 +128,37 @@ def test_happy_path_is_unaffected(handler_module):
     assert body["questionId"]
     assert body["prompt"]
     assert len(questions_table.put_items) == 1
+
+
+# --- T4: question_shown event logging ---
+
+
+def test_a_question_shown_event_is_logged_on_success(handler_module):
+    events_table = _FakeTable()
+    handler_module._questions_table = _FakeTable()
+    handler_module._progress_table = _FakeTable()
+    handler_module._session_events_table = events_table
+
+    response = handler_module.handler(_event({"sessionId": "sess-1"}), None)
+    body = json.loads(response["body"])
+
+    assert len(events_table.put_items) == 1
+    logged = events_table.put_items[0]
+    assert logged["eventType"] == "question_shown"
+    assert logged["sessionId"] == "sess-1"
+    assert logged["data"]["questionId"] == body["questionId"]
+    assert logged["data"]["subtopic"] == body["subtopic"]
+
+
+def test_a_broken_events_table_does_not_affect_the_question_flow(handler_module, caplog):
+    handler_module._questions_table = _FakeTable()
+    handler_module._progress_table = _FakeTable()
+    handler_module._session_events_table = _FakeTable(raise_on_put=True)
+
+    with caplog.at_level(logging.ERROR):
+        response = handler_module.handler(_event({}), None)
+
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["questionId"]
+    assert body["prompt"]

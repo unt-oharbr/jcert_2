@@ -49,7 +49,7 @@ def _event(question_id: str, answer: str) -> dict[str, Any]:
 
 @pytest.fixture
 def handler_module(monkeypatch):
-    for var in ("QUESTIONS_TABLE", "ATTEMPTS_TABLE", "PROGRESS_TABLE", "STREAKS_TABLE"):
+    for var in ("QUESTIONS_TABLE", "ATTEMPTS_TABLE", "PROGRESS_TABLE", "STREAKS_TABLE", "SESSION_EVENTS_TABLE"):
         monkeypatch.setenv(var, f"test-{var.lower()}")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
 
@@ -57,6 +57,7 @@ def handler_module(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     sys.modules.pop(spec.name, None)
+    module._session_events_table = _FakeTable()  # default; T4 tests below override as needed
     return module
 
 
@@ -315,3 +316,92 @@ def test_inequality_subtopic_skips_the_retry_and_resolves_immediately(handler_mo
     assert body["diagnosticOffer"] is not None
     assert new_progress["tierMisses"] == 1  # counted as a normal miss, no retry offered
     assert "attempts" not in questions_table.item  # never entered the retry path
+
+
+# --- T4: answer_submitted / tier_change event logging ---
+
+
+def test_answer_submitted_is_logged_on_the_retry_branch(handler_module):
+    events_table = _FakeTable()
+    handler_module._session_events_table = events_table
+    progress_item = {"userId": "user-123", "topicId": "algebra_equations", "tier": "standard", "tierStreak": 0, "tierMisses": 0}
+    streaks_item = {"userId": "user-123", "currentDailyStreak": 1, "questionsToday": 3, "questionsTodayDate": _TODAY_ISO}
+
+    _submit(
+        handler_module,
+        questions_table=_questions_table_for(_question_item()),
+        progress_item=progress_item,
+        streaks_item=streaks_item,
+        correct=False,
+    )
+
+    assert len(events_table.put_items) == 1
+    logged = events_table.put_items[0]
+    assert logged["eventType"] == "answer_submitted"
+    assert logged["data"]["attemptNumber"] == 1
+    assert logged["data"]["correct"] is False
+
+
+def test_answer_submitted_and_tier_change_are_both_logged_on_a_demotion(handler_module):
+    events_table = _FakeTable()
+    handler_module._session_events_table = events_table
+    # attempts=1: a resolving wrong answer, one prior miss -> demotes.
+    progress_item = {"userId": "user-123", "topicId": "algebra_equations", "tier": "standard", "tierStreak": 0, "tierMisses": 1}
+    streaks_item = {"userId": "user-123", "currentDailyStreak": 1, "questionsToday": 3, "questionsTodayDate": _TODAY_ISO}
+
+    _submit(
+        handler_module,
+        questions_table=_questions_table_for(_question_item(attempts=1)),
+        progress_item=progress_item,
+        streaks_item=streaks_item,
+        correct=False,
+    )
+
+    event_types = [e["eventType"] for e in events_table.put_items]
+    assert event_types == ["answer_submitted", "tier_change"]
+    tier_change = events_table.put_items[1]
+    assert tier_change["data"] == {
+        "topicId": "algebra_equations",
+        "subtopic": "simplifying_expressions",
+        "direction": "down",
+        "from": "standard",
+        "to": "intro",
+    }
+
+
+def test_no_tier_change_event_when_the_tier_does_not_move(handler_module):
+    events_table = _FakeTable()
+    handler_module._session_events_table = events_table
+    progress_item = {"userId": "user-123", "topicId": "algebra_equations", "tier": "standard", "tierStreak": 0, "tierMisses": 0}
+    streaks_item = {"userId": "user-123", "currentDailyStreak": 1, "questionsToday": 3, "questionsTodayDate": _TODAY_ISO}
+
+    _submit(
+        handler_module,
+        questions_table=_questions_table_for(_question_item(attempts=1)),
+        progress_item=progress_item,
+        streaks_item=streaks_item,
+        correct=True,
+    )
+
+    event_types = [e["eventType"] for e in events_table.put_items]
+    assert event_types == ["answer_submitted"]
+
+
+def test_a_broken_events_table_does_not_affect_the_answer_flow(handler_module):
+    handler_module._session_events_table = _FakeTable()
+    handler_module._session_events_table.put_item = lambda **_: (_ for _ in ()).throw(RuntimeError("boom"))
+    progress_item = {"userId": "user-123", "topicId": "algebra_equations", "tier": "standard", "tierStreak": 0, "tierMisses": 1}
+    streaks_item = {"userId": "user-123", "currentDailyStreak": 1, "questionsToday": 3, "questionsTodayDate": _TODAY_ISO}
+
+    body, new_progress, _ = _submit(
+        handler_module,
+        questions_table=_questions_table_for(_question_item(attempts=1)),
+        progress_item=progress_item,
+        streaks_item=streaks_item,
+        correct=False,
+    )
+
+    # The tier still demoted correctly — a broken event log didn't stop the
+    # actual grading/tier logic from running or from returning normally.
+    assert body["progress"]["tier"] == "intro"
+    assert new_progress["tier"] == "intro"

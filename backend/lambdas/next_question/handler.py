@@ -12,6 +12,11 @@ client as a bare 5xx with no way forward — see docs/home-view.md's "never a
 dead end" constraint. The failure is logged with enough to reproduce it
 (topic/subtopic/tier — the inputs to generation) and the client gets a
 structured, retryable response instead of an unhandled exception.
+
+Also logs a `question_shown` event (T4's session log) once the question is
+successfully generated — in its own try/except, separate from the
+generation one above, so a SessionEvents write failure can never turn a
+perfectly good question into a failed response.
 """
 
 from __future__ import annotations
@@ -26,12 +31,14 @@ from typing import Any
 
 import boto3
 
+from axiom.events import build_event_item
 from axiom.topics import TOPICS
 
 _SERVED_TTL_SECONDS = 60 * 60 * 24  # a day is more than enough to answer or abandon a question
 
 _questions_table = boto3.resource("dynamodb").Table(os.environ["QUESTIONS_TABLE"])
 _progress_table = boto3.resource("dynamodb").Table(os.environ["PROGRESS_TABLE"])
+_session_events_table = boto3.resource("dynamodb").Table(os.environ["SESSION_EVENTS_TABLE"])
 
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
@@ -64,6 +71,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     body = json.loads(event.get("body") or "{}")
     requested_topic_id = body.get("topicId")
     requested_subtopic = body.get("subtopic")
+    session_id = body.get("sessionId")
 
     if requested_topic_id in TOPICS and requested_subtopic in TOPICS[requested_topic_id].SUBTOPICS:
         topic_id, topic = requested_topic_id, TOPICS[requested_topic_id]
@@ -104,6 +112,26 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             tier,
         )
         return _generation_failed_response()
+
+    try:
+        _session_events_table.put_item(
+            Item=build_event_item(
+                user_id=user_id,
+                session_id=session_id,
+                event_type="question_shown",
+                data={
+                    "questionId": question_id,
+                    "topicId": topic_id,
+                    "subtopic": question.subtopic,
+                    "tier": question.difficulty,
+                    "prompt": question.prompt,
+                },
+            )
+        )
+    except Exception:
+        # Non-fatal: the question was generated and served fine either way —
+        # see this module's docstring.
+        _logger.exception("Failed to log question_shown event (non-fatal)")
 
     return {
         "statusCode": 200,

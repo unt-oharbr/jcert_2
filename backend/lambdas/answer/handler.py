@@ -23,11 +23,17 @@ streak); wrong twice resolves as a single miss, same as any wrong answer
 always has. `_SKIP_RETRY_ANSWER_TYPES` excludes subtopics where a second
 guess would be trivially easier than the first without requiring any real
 understanding — see that constant's comment.
+
+Also logs `answer_submitted` (every attempt, retry-offering or resolving)
+and `tier_change` (only when the tier actually moves) events for T4's
+session log — each in its own try/except, separate from the grading logic
+above, so a SessionEvents write failure can never affect grading itself.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import date, datetime, timezone
@@ -36,8 +42,10 @@ from typing import Any
 import boto3
 
 from axiom.diagnostics import build_diagnostic_offer, next_subtopic_miss_count
+from axiom.events import build_event_item
 from axiom.grading import UnparseableAnswer, check_answer
 from axiom.progress import (
+    TIER_ORDER,
     TierState,
     advance_after_answer,
     mastery_badge_earned,
@@ -50,6 +58,10 @@ _questions_table = boto3.resource("dynamodb").Table(os.environ["QUESTIONS_TABLE"
 _attempts_table = boto3.resource("dynamodb").Table(os.environ["ATTEMPTS_TABLE"])
 _progress_table = boto3.resource("dynamodb").Table(os.environ["PROGRESS_TABLE"])
 _streaks_table = boto3.resource("dynamodb").Table(os.environ["STREAKS_TABLE"])
+_session_events_table = boto3.resource("dynamodb").Table(os.environ["SESSION_EVENTS_TABLE"])
+
+_logger = logging.getLogger(__name__)
+_logger.setLevel(logging.INFO)
 
 _DEMOTION_SUSPENDED_AFTER_QUESTION = 10  # suspended from the 11th question of the day onward
 
@@ -71,6 +83,16 @@ _SKIP_RETRY_ANSWER_TYPES = {"inequality"}
 
 def _is_retry_eligible(answer_type: str) -> bool:
     return answer_type not in _SKIP_RETRY_ANSWER_TYPES
+
+
+def _log_event(*, user_id: str, session_id: str | None, event_type: str, data: dict[str, Any]) -> None:
+    """Best-effort: a SessionEvents write failure must never affect grading."""
+    try:
+        _session_events_table.put_item(
+            Item=build_event_item(user_id=user_id, session_id=session_id, event_type=event_type, data=data)
+        )
+    except Exception:
+        _logger.exception("Failed to log %s event (non-fatal)", event_type)
 
 
 def _user_id(event: dict[str, Any]) -> str:
@@ -108,6 +130,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     body = json.loads(event.get("body") or "{}")
     question_id = body.get("questionId")
     submitted = body.get("answer", "")
+    session_id = body.get("sessionId")
+    ms_since_shown = body.get("millisecondsSinceShown")
 
     question_item = _questions_table.get_item(Key={"questionId": question_id}).get("Item")
     if question_item is None:
@@ -142,6 +166,17 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "submittedAnswer": submitted,
                 "attemptNumber": 1,
             }
+        )
+        _log_event(
+            user_id=user_id,
+            session_id=session_id,
+            event_type="answer_submitted",
+            data={
+                "questionId": question_id,
+                "attemptNumber": 1,
+                "correct": False,
+                "millisecondsSinceShown": ms_since_shown,
+            },
         )
         # Nothing resolved yet — report current state unchanged, with no
         # correct answer, no diagnostic offer, no indication of what was
@@ -178,6 +213,17 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "attemptNumber": 2 if is_second_attempt else 1,
         }
     )
+    _log_event(
+        user_id=user_id,
+        session_id=session_id,
+        event_type="answer_submitted",
+        data={
+            "questionId": question_id,
+            "attemptNumber": 2 if is_second_attempt else 1,
+            "correct": correct,
+            "millisecondsSinceShown": ms_since_shown,
+        },
+    )
 
     # --- daily streak (computed first: today's question count decides whether
     # tier demotion is suspended for this answer) ---
@@ -201,6 +247,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # --- tier, badges, topic progress ---
     progress_item = _progress_table.get_item(Key={"userId": user_id, "topicId": topic_id}).get("Item")
+    tier_before = _tier_state_from_item(progress_item).tier
     if is_second_attempt and correct:
         # Neutral: she got there on the second try, which is real, but it
         # doesn't count toward the advance streak the way a first-attempt
@@ -210,6 +257,20 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         demotion_suspended = streak_state.questions_today > _DEMOTION_SUSPENDED_AFTER_QUESTION
         tier_state = advance_after_answer(
             _tier_state_from_item(progress_item), correct, demotion_suspended=demotion_suspended
+        )
+
+    if tier_state.tier != tier_before:
+        _log_event(
+            user_id=user_id,
+            session_id=session_id,
+            event_type="tier_change",
+            data={
+                "topicId": topic_id,
+                "subtopic": question_item["subtopic"],
+                "direction": "up" if TIER_ORDER.index(tier_state.tier) > TIER_ORDER.index(tier_before) else "down",
+                "from": tier_before,
+                "to": tier_state.tier,
+            },
         )
 
     intro_badge_earned = bool((progress_item or {}).get("introBadgeEarned", False))
