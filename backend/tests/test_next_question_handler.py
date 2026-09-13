@@ -130,6 +130,32 @@ def test_happy_path_is_unaffected(handler_module):
     assert len(questions_table.put_items) == 1
 
 
+# --- T7: the stored seed reproduces the exact question ---
+
+
+def test_stored_seed_reproduces_the_exact_question(handler_module):
+    import random as random_module
+
+    from axiom.topics import TOPICS
+
+    questions_table = _FakeTable()
+    handler_module._questions_table = questions_table
+    handler_module._progress_table = _FakeTable()
+
+    response = handler_module.handler(_event({"topicId": "algebra_equations", "subtopic": "solving_linear_equations"}), None)
+    body = json.loads(response["body"])
+
+    stored = questions_table.put_items[0]
+    assert isinstance(stored["seed"], int)
+
+    reproduced = TOPICS["algebra_equations"].generate(
+        "solving_linear_equations", stored["difficulty"], random_module.Random(stored["seed"])
+    )
+
+    assert reproduced.prompt == body["prompt"]
+    assert reproduced.answer == stored["answer"]
+
+
 # --- T4: question_shown event logging ---
 
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { getWorkedExample, type WorkedExample } from '../api/diagnostic'
 import { logSessionEvent } from '../api/events'
+import { flagQuestion, type FlagReason } from '../api/flag'
 import { getNextQuestion, submitAnswer, type AnswerResult, type NextQuestion } from '../api/session'
 import { SlopeExplorer } from '../components/SlopeExplorer'
 
@@ -32,6 +33,9 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   const [correctStreak, setCorrectStreak] = useState(0)
   const [newlyEarnedBadge, setNewlyEarnedBadge] = useState<'intro' | 'mastery' | null>(null)
   const [blockSummary, setBlockSummary] = useState<BlockSummary | null>(null)
+  const [showFlagPanel, setShowFlagPanel] = useState(false)
+  const [flagNote, setFlagNote] = useState('')
+  const [flagAcknowledged, setFlagAcknowledged] = useState(false)
 
   // Badges are persistent flags from the server — "earned" stays true on
   // every later answer too, so a celebration only makes sense on the
@@ -107,6 +111,9 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     setResult(null)
     setWorkedExample(null)
     setAnswer('')
+    setShowFlagPanel(false)
+    setFlagNote('')
+    setFlagAcknowledged(false)
     awaitingSecondAttemptRef.current = false
     try {
       const retry = retrySameSubtopic && question ? { topicId: question.topicId, subtopic: question.subtopic } : undefined
@@ -200,6 +207,24 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     }
   }
 
+  // No confirmation step: tapping a reason submits immediately. Only
+  // flagNote/showFlagPanel are touched here — answer/result stay exactly as
+  // they were, so flagging mid-question never loses her place or what
+  // she's typed.
+  async function submitFlag(reason: FlagReason) {
+    if (!question) return
+    setShowFlagPanel(false)
+    setFlagAcknowledged(true)
+    try {
+      await flagQuestion(idToken, question.questionId, reason, flagNote, answer)
+    } catch {
+      // Deliberately silent — flagging is optional, low-stakes feedback;
+      // see api/flag.ts. A rare network failure here shouldn't interrupt
+      // her or need a retry control of its own.
+    }
+    setFlagNote('')
+  }
+
   async function handleSeeWhy() {
     if (!result?.diagnosticOffer) return
     try {
@@ -291,6 +316,52 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
       {!isLoading && question && (
         <div className="card question-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p>{question.prompt}</p>
+
+          <div style={{ fontSize: '0.85rem' }}>
+            {!showFlagPanel && !flagAcknowledged && (
+              <button
+                type="button"
+                className="quiet"
+                onClick={() => setShowFlagPanel(true)}
+                style={{ fontSize: '0.85rem', padding: '0.3rem 0.7rem' }}
+              >
+                Flag this question
+              </button>
+            )}
+            {showFlagPanel && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className="button-row">
+                  <button type="button" className="secondary" onClick={() => void submitFlag('wrong_answer')}>
+                    Wrong answer
+                  </button>
+                  <button type="button" className="secondary" onClick={() => void submitFlag('confusing')}>
+                    Confusing
+                  </button>
+                  <button type="button" className="secondary" onClick={() => void submitFlag('seen_before')}>
+                    Seen this already
+                  </button>
+                  <button type="button" className="secondary" onClick={() => void submitFlag('too_hard')}>
+                    Too hard
+                  </button>
+                </div>
+                <input
+                  value={flagNote}
+                  onChange={(e) => setFlagNote(e.target.value)}
+                  placeholder="Optional note"
+                  style={{ fontSize: '0.85rem' }}
+                />
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => setShowFlagPanel(false)}
+                  style={{ alignSelf: 'flex-start', fontSize: '0.85rem' }}
+                >
+                  Never mind
+                </button>
+              </div>
+            )}
+            {flagAcknowledged && <span className="stat-label">Noted.</span>}
+          </div>
 
           {question.visualization && hasRelationship && (
             <SlopeExplorer
