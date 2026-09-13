@@ -5,6 +5,14 @@ The full diagnostic offer (see-why / try-another, nudge escalation after two
 same-prerequisite misses) is Milestone 6 — this returns whether she was
 right and the correct answer, plus enough progress state for the UI to show
 immediate feedback (tier change, a badge just earned, the daily streak).
+
+Tier demotion is suspended from the 11th question of the day onward (see
+docs/spec.md's session-shape rules): a tired mistake deep into a long
+session shouldn't cost her a tier. `questions_today` (the same counter the
+daily streak already tracks, right or wrong) stands in for "how far into
+today's session is this answer" — there's no separate session concept
+elsewhere in the backend, so this reuses the one that already exists rather
+than inventing a second. Advancement is never suspended.
 """
 
 from __future__ import annotations
@@ -32,6 +40,8 @@ _questions_table = boto3.resource("dynamodb").Table(os.environ["QUESTIONS_TABLE"
 _attempts_table = boto3.resource("dynamodb").Table(os.environ["ATTEMPTS_TABLE"])
 _progress_table = boto3.resource("dynamodb").Table(os.environ["PROGRESS_TABLE"])
 _streaks_table = boto3.resource("dynamodb").Table(os.environ["STREAKS_TABLE"])
+
+_DEMOTION_SUSPENDED_AFTER_QUESTION = 10  # suspended from the 11th question of the day onward
 
 
 def _user_id(event: dict[str, Any]) -> str:
@@ -97,9 +107,32 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
     )
 
+    # --- daily streak (computed first: today's question count decides whether
+    # tier demotion is suspended for this answer) ---
+    streak_item = _streaks_table.get_item(Key={"userId": user_id}).get("Item")
+    streak_state = record_attempt(_streak_state_from_item(streak_item), today)
+
+    new_streak_item: dict[str, Any] = {
+        "userId": user_id,
+        "currentDailyStreak": streak_state.current_daily_streak,
+        "longestStreak": streak_state.longest_streak,
+        "freeDaysUsedThisWeek": streak_state.free_days_used_this_week,
+        "questionsToday": streak_state.questions_today,
+    }
+    if streak_state.last_active_date:
+        new_streak_item["lastActiveDate"] = streak_state.last_active_date.isoformat()
+    if streak_state.week_start:
+        new_streak_item["weekStart"] = streak_state.week_start.isoformat()
+    if streak_state.questions_today_date:
+        new_streak_item["questionsTodayDate"] = streak_state.questions_today_date.isoformat()
+    _streaks_table.put_item(Item=new_streak_item)
+
     # --- tier, badges, topic progress ---
+    demotion_suspended = streak_state.questions_today > _DEMOTION_SUSPENDED_AFTER_QUESTION
     progress_item = _progress_table.get_item(Key={"userId": user_id, "topicId": topic_id}).get("Item")
-    tier_state = advance_after_answer(_tier_state_from_item(progress_item), correct)
+    tier_state = advance_after_answer(
+        _tier_state_from_item(progress_item), correct, demotion_suspended=demotion_suspended
+    )
 
     intro_badge_earned = bool((progress_item or {}).get("introBadgeEarned", False))
     mastery_streak_days = set((progress_item or {}).get("masteryStreakDays", []))
@@ -135,25 +168,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     diagnostic_offer = None if correct else build_diagnostic_offer(subtopic, new_miss_count)
 
-    # --- daily streak ---
-    streak_item = _streaks_table.get_item(Key={"userId": user_id}).get("Item")
-    streak_state = record_attempt(_streak_state_from_item(streak_item), today)
-
-    new_streak_item: dict[str, Any] = {
-        "userId": user_id,
-        "currentDailyStreak": streak_state.current_daily_streak,
-        "longestStreak": streak_state.longest_streak,
-        "freeDaysUsedThisWeek": streak_state.free_days_used_this_week,
-        "questionsToday": streak_state.questions_today,
-    }
-    if streak_state.last_active_date:
-        new_streak_item["lastActiveDate"] = streak_state.last_active_date.isoformat()
-    if streak_state.week_start:
-        new_streak_item["weekStart"] = streak_state.week_start.isoformat()
-    if streak_state.questions_today_date:
-        new_streak_item["questionsTodayDate"] = streak_state.questions_today_date.isoformat()
-    _streaks_table.put_item(Item=new_streak_item)
-
     return _response(
         200,
         {
@@ -166,5 +180,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "masteryBadgeEarned": mastery_badge,
             },
             "dailyStreak": streak_state.current_daily_streak,
+            "questionsToday": streak_state.questions_today,
         },
     )

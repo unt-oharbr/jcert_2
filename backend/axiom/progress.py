@@ -31,13 +31,21 @@ class TierState:
     misses: int = 0  # consecutive incorrect at the current tier
 
 
-def advance_after_answer(state: TierState, correct: bool) -> TierState:
+def advance_after_answer(state: TierState, correct: bool, *, demotion_suspended: bool = False) -> TierState:
+    """`demotion_suspended` is set once she's deep into a long session (see
+    the answer handler) — a tired mistake late on shouldn't cost her a tier.
+    Advancement is unaffected; a wrong answer still clears the advance streak,
+    it just doesn't count toward (or load) the miss counter, so it can't
+    demote today and can't quietly demote tomorrow either."""
     index = TIER_ORDER.index(state.tier)
     if correct:
         streak = state.streak + 1
         if streak >= _ADVANCE_AFTER_STREAK and index < len(TIER_ORDER) - 1:
             return TierState(tier=TIER_ORDER[index + 1], streak=0, misses=0)
         return replace(state, streak=streak, misses=0)
+
+    if demotion_suspended:
+        return replace(state, streak=0)
 
     misses = state.misses + 1
     if misses >= _DEMOTE_AFTER_MISSES and index > 0:

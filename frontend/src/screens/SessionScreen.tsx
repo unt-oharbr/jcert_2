@@ -9,6 +9,17 @@ interface SessionScreenProps {
   onExit: () => void
 }
 
+interface BlockSummary {
+  questionsToday: number
+  tierMovements: string[]
+}
+
+const BLOCK_SIZE = 5
+
+function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
 export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   const [question, setQuestion] = useState<NextQuestion | null>(null)
   const [answer, setAnswer] = useState('')
@@ -19,6 +30,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   const [questionNumber, setQuestionNumber] = useState(1)
   const [correctStreak, setCorrectStreak] = useState(0)
   const [newlyEarnedBadge, setNewlyEarnedBadge] = useState<'intro' | 'mastery' | null>(null)
+  const [blockSummary, setBlockSummary] = useState<BlockSummary | null>(null)
 
   // Badges are persistent flags from the server — "earned" stays true on
   // every later answer too, so a celebration only makes sense on the
@@ -36,6 +48,17 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   // So the retry control can re-issue exactly the request that didn't come
   // back, rather than always falling back to a plain random question.
   const lastRetrySameSubtopicRef = useRef(false)
+
+  // Block-of-five bookkeeping. "Today's questions answered" comes from the
+  // server (the same counter the daily streak uses) rather than a
+  // client-only count, so the block boundary lands correctly even if she
+  // reloads mid-block. Tier movements are best-effort and session-local —
+  // there's no server-side "this block's events" concept, only per-answer
+  // tier snapshots, so a reload mid-block can lose that one summary line
+  // without affecting whether the boundary itself fires correctly.
+  const lastQuestionsTodayRef = useRef(0)
+  const previousTierByTopicRef = useRef<Record<string, string>>({})
+  const tierMovementsThisBlockRef = useRef<string[]>([])
 
   // After a correct answer, a fresh random question keeps the mix going.
   // After a wrong one, "another one like this" — same topic/subtopic — is
@@ -75,6 +98,26 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The boundary check happens here — when she's *leaving* the question she
+  // just got feedback on — rather than the instant she submits the fifth
+  // answer. That way she still gets to read the verdict (and the worked
+  // example, if she wants it) for the question that completed the block;
+  // only the next fetch is replaced with the completion screen.
+  function advanceToNextQuestion(retrySameSubtopic = false) {
+    const questionsToday = lastQuestionsTodayRef.current
+    if (questionsToday > 0 && questionsToday % BLOCK_SIZE === 0) {
+      setBlockSummary({ questionsToday, tierMovements: [...tierMovementsThisBlockRef.current] })
+      return
+    }
+    void loadNextQuestion(retrySameSubtopic)
+  }
+
+  function continueToNextBlock() {
+    tierMovementsThisBlockRef.current = []
+    setBlockSummary(null)
+    void loadNextQuestion()
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!question || !answer.trim()) return
@@ -83,6 +126,13 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
       const outcome = await submitAnswer(idToken, question.questionId, answer.trim())
       setResult(outcome)
       setCorrectStreak((n) => (outcome.correct ? n + 1 : 0))
+      lastQuestionsTodayRef.current = outcome.questionsToday
+
+      const previousTier = previousTierByTopicRef.current[question.topicId]
+      if (previousTier && previousTier !== outcome.progress.tier) {
+        tierMovementsThisBlockRef.current.push(`${question.topicLabel}: moved to ${capitalize(outcome.progress.tier)}`)
+      }
+      previousTierByTopicRef.current[question.topicId] = outcome.progress.tier
 
       const previous = previousBadgesRef.current
       const { introBadgeEarned, masteryBadgeEarned } = outcome.progress
@@ -131,6 +181,32 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
       default:
         return 'Drag the points below to explore.'
     }
+  }
+
+  // A genuine completion state, not a pause: the question card, the "next"
+  // controls, none of it renders here. Deliberately identical wording every
+  // time — the third block reads the same as the first, since going further
+  // is allowed but never scored or called out.
+  if (blockSummary) {
+    return (
+      <>
+        <div className="stat-row">
+          <h1>Practice</h1>
+        </div>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p>{blockSummary.questionsToday} questions answered today.</p>
+          {blockSummary.tierMovements.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          <button type="button" onClick={continueToNextBlock} style={{ alignSelf: 'flex-start' }}>
+            Continue
+          </button>
+        </div>
+        <button type="button" className="quiet" onClick={onExit} style={{ alignSelf: 'flex-start' }}>
+          Done for now
+        </button>
+      </>
+    )
   }
 
   return (
@@ -198,7 +274,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
                   revealAnswer
                 />
               )}
-              <button type="button" onClick={() => loadNextQuestion()} style={{ alignSelf: 'flex-start' }}>
+              <button type="button" onClick={() => advanceToNextQuestion()} style={{ alignSelf: 'flex-start' }}>
                 Next question
               </button>
             </>
@@ -223,7 +299,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
                   />
                 </>
               )}
-              <button type="button" onClick={() => loadNextQuestion(true)} style={{ alignSelf: 'flex-start' }}>
+              <button type="button" onClick={() => advanceToNextQuestion(true)} style={{ alignSelf: 'flex-start' }}>
                 Try a similar question
               </button>
             </>
@@ -239,7 +315,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
                 <button type="button" onClick={handleSeeWhy} className={nudge ? '' : 'secondary'}>
                   See why
                 </button>
-                <button type="button" onClick={() => loadNextQuestion(true)} className="secondary">
+                <button type="button" onClick={() => advanceToNextQuestion(true)} className="secondary">
                   Try another
                 </button>
               </div>

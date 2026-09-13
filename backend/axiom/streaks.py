@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
-DAILY_QUESTION_TARGET = 10
+DAILY_QUESTION_TARGET = 5
 
 
 @dataclass(frozen=True)

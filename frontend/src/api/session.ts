@@ -36,6 +36,7 @@ export interface AnswerResult {
     masteryBadgeEarned: boolean
   }
   dailyStreak: number
+  questionsToday: number
 }
 
 interface RetrySameSubtopic {
