@@ -17,6 +17,12 @@ Also logs a `question_shown` event (T4's session log) once the question is
 successfully generated — in its own try/except, separate from the
 generation one above, so a SessionEvents write failure can never turn a
 perfectly good question into a failed response.
+
+Every question is generated from an explicit random seed (stored alongside
+it) rather than an unseeded `random.Random()` — this is what makes T7's
+flagged questions exactly reproducible later: `topic.generate(subtopic,
+tier, random.Random(seed))` deterministically recreates the identical
+prompt/answer, since the generators are pure functions of their inputs.
 """
 
 from __future__ import annotations
@@ -83,7 +89,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     tier = "unknown"  # overwritten below; kept so a failed _current_tier call still logs something
     try:
         tier = _current_tier(user_id, topic_id)
-        question = topic.generate(subtopic, tier, random.Random())
+        seed = random.randrange(2**32)
+        question = topic.generate(subtopic, tier, random.Random(seed))
 
         question_id = str(uuid.uuid4())
         _questions_table.put_item(
@@ -96,15 +103,18 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "answerType": question.answer_type,
                 "answer": question.answer,
                 "commonWrongAnswers": question.common_wrong_answers,
+                "prompt": question.prompt,
+                "seed": seed,
                 "ttl": int(time.time()) + _SERVED_TTL_SECONDS,
             }
         )
     except Exception:
         # Logged, not re-raised: an unhandled exception here would reach the
         # client as a bare 5xx with no way forward. topic_id/subtopic/tier are
-        # exactly the inputs needed to attempt to reproduce this — the RNG
-        # draw itself isn't seeded/stored, so an exact repro isn't possible,
-        # only a same-inputs retry.
+        # exactly the inputs needed to attempt a same-inputs retry — a failure
+        # here happens before `seed` exists, so an exact repro of the specific
+        # failed attempt still isn't possible, only of questions that make it
+        # past this point (see the `seed` field stored above).
         _logger.exception(
             "next_question failed to generate/persist a question (topicId=%s, subtopic=%s, tier=%s)",
             topic_id,
