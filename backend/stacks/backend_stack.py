@@ -27,6 +27,10 @@ _ROUTES: list[tuple[str, str, str]] = [
     ("/session/answer", "POST", "answer"),
     ("/diagnostic/{prerequisiteNodeId}", "GET", "diagnostic"),
     ("/questions/{questionId}/flag", "POST", "flag"),
+    # Invisible instrumentation (T4): frontend-only lifecycle events with no
+    # existing backend touchpoint. Grading-pipeline events are logged inline
+    # in next_question/answer instead — see axiom/events.py.
+    ("/session/event", "POST", "session_event"),
     ("/progress", "GET", "progress"),
     ("/profile", "GET", "profile"),
     ("/profile", "PUT", "profile"),
@@ -102,6 +106,10 @@ class AxiomBackendStack(Stack):
             "progress": make_table("ProgressState", "userId", "topicId"),
             "streaks": make_table("StreakState", "userId"),
             "flags": make_table("Flags", "questionId", "userId"),
+            # userId partition key, eventId (ISO timestamp + tie-breaker)
+            # sort key — see axiom/events.py. Never read by the frontend;
+            # scripts/session_report.py is the only reader.
+            "session_events": make_table("SessionEvents", "userId", "eventId"),
         }
 
     def _table_env(self) -> dict[str, str]:
@@ -112,6 +120,7 @@ class AxiomBackendStack(Stack):
             "PROGRESS_TABLE": self.tables["progress"].table_name,
             "STREAKS_TABLE": self.tables["streaks"].table_name,
             "FLAGS_TABLE": self.tables["flags"].table_name,
+            "SESSION_EVENTS_TABLE": self.tables["session_events"].table_name,
         }
 
     def _build_function(self, handler_dir: str) -> lambda_.Function:

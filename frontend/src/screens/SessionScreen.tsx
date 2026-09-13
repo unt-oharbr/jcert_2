@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { getWorkedExample, type WorkedExample } from '../api/diagnostic'
+import { logSessionEvent } from '../api/events'
 import { getNextQuestion, submitAnswer, type AnswerResult, type NextQuestion } from '../api/session'
 import { SlopeExplorer } from '../components/SlopeExplorer'
 
@@ -66,6 +67,27 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   // backend's tier-neutral treatment of the same event.
   const awaitingSecondAttemptRef = useRef(false)
 
+  // T4: invisible instrumentation, never read back by this app. One id per
+  // mount ties every event from this sitting together (see
+  // scripts/session_report.py); `crypto.randomUUID()` needs no server
+  // round-trip to allocate, unlike the questionId the server hands back.
+  const sessionIdRef = useRef(crypto.randomUUID())
+  // When the current question was actually shown to her — reset on a new
+  // question, but deliberately NOT on a same-question retry, since
+  // "milliseconds since shown" for a second attempt is measured from when
+  // she first saw the question, not from the retry itself.
+  const questionShownAtRef = useRef(Date.now())
+
+  useEffect(() => {
+    logSessionEvent(idToken, sessionIdRef.current, 'session_start')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function exitSession() {
+    logSessionEvent(idToken, sessionIdRef.current, 'session_end')
+    onExit()
+  }
+
   // After a correct answer, a fresh random question keeps the mix going.
   // After a wrong one, "another one like this" — same topic/subtopic — is
   // what actually lets her prove she's fixed the mistake, rather than
@@ -88,9 +110,10 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     awaitingSecondAttemptRef.current = false
     try {
       const retry = retrySameSubtopic && question ? { topicId: question.topicId, subtopic: question.subtopic } : undefined
-      const next = await getNextQuestion(idToken, retry)
+      const next = await getNextQuestion(idToken, sessionIdRef.current, retry)
       if (requestId !== requestIdRef.current) return
       setQuestion(next)
+      questionShownAtRef.current = Date.now()
       if (!isFirstQuestion) setQuestionNumber((n) => n + 1)
     } catch {
       if (requestId !== requestIdRef.current) return
@@ -111,8 +134,12 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   // example, if she wants it) for the question that completed the block;
   // only the next fetch is replaced with the completion screen.
   function advanceToNextQuestion(retrySameSubtopic = false) {
+    if (workedExample) {
+      logSessionEvent(idToken, sessionIdRef.current, 'worked_example_dismissed')
+    }
     const questionsToday = lastQuestionsTodayRef.current
     if (questionsToday > 0 && questionsToday % BLOCK_SIZE === 0) {
+      logSessionEvent(idToken, sessionIdRef.current, 'block_complete', { questionsToday })
       setBlockSummary({ questionsToday, tierMovements: [...tierMovementsThisBlockRef.current] })
       return
     }
@@ -130,7 +157,13 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     if (!question || !answer.trim()) return
     setError(null)
     try {
-      const outcome = await submitAnswer(idToken, question.questionId, answer.trim())
+      const outcome = await submitAnswer(
+        idToken,
+        sessionIdRef.current,
+        question.questionId,
+        answer.trim(),
+        Date.now() - questionShownAtRef.current,
+      )
       setResult(outcome)
 
       const wasSecondAttempt = awaitingSecondAttemptRef.current
@@ -171,6 +204,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     if (!result?.diagnosticOffer) return
     try {
       setWorkedExample(await getWorkedExample(idToken, result.diagnosticOffer.prerequisiteNodeId))
+      logSessionEvent(idToken, sessionIdRef.current, 'worked_example_shown')
     } catch {
       setError("Couldn't load the explanation — try again.")
     }
@@ -220,7 +254,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
             Continue
           </button>
         </div>
-        <button type="button" className="quiet" onClick={onExit} style={{ alignSelf: 'flex-start' }}>
+        <button type="button" className="quiet" onClick={exitSession} style={{ alignSelf: 'flex-start' }}>
           Done for now
         </button>
       </>
@@ -366,7 +400,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
         </p>
       )}
 
-      <button type="button" className="quiet" onClick={onExit} style={{ alignSelf: 'flex-start' }}>
+      <button type="button" className="quiet" onClick={exitSession} style={{ alignSelf: 'flex-start' }}>
         Done for now
       </button>
     </>

@@ -49,16 +49,26 @@ interface RetrySameSubtopic {
   subtopic: string
 }
 
-export async function getNextQuestion(idToken: string, retry?: RetrySameSubtopic): Promise<NextQuestion> {
+export async function getNextQuestion(
+  idToken: string,
+  sessionId: string,
+  retry?: RetrySameSubtopic,
+): Promise<NextQuestion> {
   return apiFetch<NextQuestion>('/session/next-question', idToken, {
     method: 'POST',
-    body: retry ? JSON.stringify(retry) : undefined,
+    body: JSON.stringify({ sessionId, ...retry }),
   })
 }
 
-export async function submitAnswer(idToken: string, questionId: string, answer: string): Promise<AnswerResult> {
+export async function submitAnswer(
+  idToken: string,
+  sessionId: string,
+  questionId: string,
+  answer: string,
+  millisecondsSinceShown: number,
+): Promise<AnswerResult> {
   return apiFetch<AnswerResult>('/session/answer', idToken, {
     method: 'POST',
-    body: JSON.stringify({ questionId, answer }),
+    body: JSON.stringify({ sessionId, questionId, answer, millisecondsSinceShown }),
   })
 }
