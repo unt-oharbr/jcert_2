@@ -10,10 +10,11 @@ interface DashboardProps {
   profile: Profile
   idToken: string
   onStartSession: () => void
+  onEditProfile: () => void
   refreshKey: number
 }
 
-export function Dashboard({ profile, idToken, onStartSession, refreshKey }: DashboardProps) {
+export function Dashboard({ profile, idToken, onStartSession, onEditProfile, refreshKey }: DashboardProps) {
   const [progress, setProgress] = useState<ProgressSummary | null>(null)
   const [reminderTime, setReminderTime] = useState('17:00')
 
@@ -34,6 +35,9 @@ export function Dashboard({ profile, idToken, onStartSession, refreshKey }: Dash
           {AVATAR_GLYPH[profile.avatar]}
         </span>
         <h1>Hey, {profile.nickname}</h1>
+        <button type="button" className="quiet" onClick={onEditProfile} style={{ marginLeft: 'auto' }}>
+          Edit profile
+        </button>
       </div>
 
       {progress && (

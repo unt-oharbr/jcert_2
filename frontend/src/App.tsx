@@ -22,6 +22,7 @@ function AppShell() {
   const [isProfileNew, setIsProfileNew] = useState(false)
   const [isProfileLoading, setIsProfileLoading] = useState(true)
   const [inSession, setInSession] = useState(false)
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [progressRefreshKey, setProgressRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -54,6 +55,20 @@ function AppShell() {
     )
   }
 
+  if (isEditingProfile) {
+    return (
+      <ProfileSetupScreen
+        initialProfile={profile}
+        onCancel={() => setIsEditingProfile(false)}
+        onSave={async (update) => {
+          const saved = await putProfile(idToken, update)
+          setProfile(saved)
+          setIsEditingProfile(false)
+        }}
+      />
+    )
+  }
+
   if (inSession) {
     return (
       <Shell>
@@ -74,6 +89,7 @@ function AppShell() {
         profile={profile}
         idToken={idToken}
         onStartSession={() => setInSession(true)}
+        onEditProfile={() => setIsEditingProfile(true)}
         refreshKey={progressRefreshKey}
       />
     </Shell>
