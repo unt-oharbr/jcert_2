@@ -40,6 +40,30 @@ def test_intro_tier_does_not_demote_further():
     assert state.tier == "intro"
 
 
+def test_demotion_suspended_does_not_demote_on_two_wrong_in_a_row():
+    state = TierState(tier="standard", streak=0, misses=0)
+    state = advance_after_answer(state, correct=False, demotion_suspended=True)
+    state = advance_after_answer(state, correct=False, demotion_suspended=True)
+    assert state.tier == "standard"
+
+
+def test_demotion_suspended_does_not_load_the_miss_counter_for_later():
+    # A frozen (not reset-to-zero) miss counter would silently combine with
+    # misses recorded once suspension lifts (e.g. the next day) and demote
+    # her for two unrelated mistakes that were never meant to count together.
+    state = TierState(tier="standard", streak=0, misses=0)
+    state = advance_after_answer(state, correct=False, demotion_suspended=True)
+    assert state.misses == 0
+
+
+def test_demotion_suspended_still_allows_advancement():
+    state = TierState(tier="standard", streak=0, misses=0)
+    state = advance_after_answer(state, correct=False, demotion_suspended=True)  # a miss, but suspended
+    for _ in range(3):
+        state = advance_after_answer(state, correct=True, demotion_suspended=True)
+    assert state.tier == "full"
+
+
 def test_a_correct_answer_resets_the_miss_counter():
     state = TierState(tier="standard", streak=0, misses=1)
     state = advance_after_answer(state, correct=True)
