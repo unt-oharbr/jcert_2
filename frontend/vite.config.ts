@@ -20,9 +20,19 @@ export default defineConfig({
         theme_color: '#3454d1',
         background_color: '#f3f6fb',
         display: 'standalone',
-        // Icons land in the Milestone 10 visual design pass, alongside the
-        // rest of the app's look — placeholder-free is better than wrong.
-        icons: [],
+        start_url: '/',
+        // Rasterised from public/favicon.svg (the real Axiom mark — NOT
+        // public/icons.svg, which is an unrelated sprite sheet of social
+        // icons left over from the Vite template, despite looking like an
+        // obvious source at a glance). "any" icons keep the logo on a
+        // transparent background; "maskable" fills the whole canvas with
+        // the theme colour and keeps the logo well inside the safe zone so
+        // OS-applied masks (circle, squircle, …) never clip it.
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
     }),
   ],
