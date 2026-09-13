@@ -33,12 +33,17 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   // result.
   const requestIdRef = useRef(0)
 
+  // So the retry control can re-issue exactly the request that didn't come
+  // back, rather than always falling back to a plain random question.
+  const lastRetrySameSubtopicRef = useRef(false)
+
   // After a correct answer, a fresh random question keeps the mix going.
   // After a wrong one, "another one like this" — same topic/subtopic — is
   // what actually lets her prove she's fixed the mistake, rather than
   // wandering off to something unrelated that proves nothing either way.
   async function loadNextQuestion(retrySameSubtopic = false) {
     const requestId = ++requestIdRef.current
+    lastRetrySameSubtopicRef.current = retrySameSubtopic
     // The very first question shouldn't bump the counter — it's already
     // "Question 1" from the initial state. Every load after that is a
     // genuinely new question replacing what's on screen, so that's the
@@ -140,6 +145,21 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
 
       {isLoading && <p>Loading…</p>}
 
+      {!isLoading && !question && error && (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p role="alert" className="feedback-wrong">
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => loadNextQuestion(lastRetrySameSubtopicRef.current)}
+            style={{ alignSelf: 'flex-start' }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       {!isLoading && question && (
         <div className="card question-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <p>{question.prompt}</p>
@@ -228,7 +248,10 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
         </div>
       )}
 
-      {error && (
+      {/* The no-question case above already renders `error` with its own
+          retry control — this covers an error while a question is still on
+          screen (e.g. a submit that didn't come back). */}
+      {question && error && (
         <p role="alert" className="feedback-wrong">
           {error}
         </p>
