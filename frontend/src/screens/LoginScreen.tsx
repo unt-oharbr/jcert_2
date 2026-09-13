@@ -53,7 +53,7 @@ export function LoginScreen() {
       <form onSubmit={handleSubmit} className="auth-card">
         <div>
           <h1>Axiom</h1>
-          <p style={{ color: 'var(--ink-muted)', marginTop: '0.3rem' }}>Coordinate Geometry of the Line</p>
+          <p style={{ color: 'var(--ink-muted)', marginTop: '0.3rem' }}>Junior Cycle Higher Level Maths</p>
         </div>
 
         <div>

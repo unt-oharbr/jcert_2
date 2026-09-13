@@ -26,7 +26,7 @@ export function buildReminderIcs(time: string): string {
     'DURATION:PT15M',
     'RRULE:FREQ=DAILY',
     'SUMMARY:Axiom — Maths practice time',
-    'DESCRIPTION:Time for your daily practice on Coordinate Geometry of the Line.',
+    'DESCRIPTION:Time for your daily Maths practice.',
     'BEGIN:VALARM',
     'TRIGGER:PT0M',
     'ACTION:DISPLAY',

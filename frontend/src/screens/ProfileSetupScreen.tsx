@@ -8,12 +8,17 @@ const COLOUR_THEMES: ColourTheme[] = ['indigo', 'coral', 'teal', 'amber', 'viole
 
 interface ProfileSetupScreenProps {
   onSave: (update: { nickname: string; avatar: AvatarId; colourTheme: ColourTheme }) => Promise<void>
+  // Present only when reopening an existing profile to edit it — first-run
+  // setup has nothing to pre-fill and nowhere to cancel back to.
+  initialProfile?: { nickname: string; avatar: AvatarId; colourTheme: ColourTheme }
+  onCancel?: () => void
 }
 
-export function ProfileSetupScreen({ onSave }: ProfileSetupScreenProps) {
-  const [nickname, setNickname] = useState('')
-  const [avatar, setAvatar] = useState<AvatarId>(AVATARS[0]!)
-  const [colourTheme, setColourTheme] = useState<ColourTheme>(COLOUR_THEMES[0]!)
+export function ProfileSetupScreen({ onSave, initialProfile, onCancel }: ProfileSetupScreenProps) {
+  const isEditing = Boolean(initialProfile)
+  const [nickname, setNickname] = useState(initialProfile?.nickname ?? '')
+  const [avatar, setAvatar] = useState<AvatarId>(initialProfile?.avatar ?? AVATARS[0]!)
+  const [colourTheme, setColourTheme] = useState<ColourTheme>(initialProfile?.colourTheme ?? COLOUR_THEMES[0]!)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -38,9 +43,11 @@ export function ProfileSetupScreen({ onSave }: ProfileSetupScreenProps) {
     <main className="centered-screen">
       <form onSubmit={handleSubmit} className="auth-card">
         <div>
-          <h1>Make it yours</h1>
+          <h1>{isEditing ? 'Your profile' : 'Make it yours'}</h1>
           <p style={{ color: 'var(--ink-muted)', marginTop: '0.3rem' }}>
-            This is your profile — pick whatever you like, change it any time.
+            {isEditing
+              ? 'Update your nickname, avatar or colour.'
+              : 'This is your profile — pick whatever you like, change it any time.'}
           </p>
         </div>
 
@@ -97,8 +104,13 @@ export function ProfileSetupScreen({ onSave }: ProfileSetupScreenProps) {
         )}
 
         <button type="submit" disabled={isSaving}>
-          {isSaving ? 'Saving…' : "Let's go"}
+          {isSaving ? 'Saving…' : isEditing ? 'Save' : "Let's go"}
         </button>
+        {isEditing && onCancel && (
+          <button type="button" className="quiet" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </button>
+        )}
       </form>
     </main>
   )
