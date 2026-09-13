@@ -13,6 +13,16 @@ daily streak already tracks, right or wrong) stands in for "how far into
 today's session is this answer" — there's no separate session concept
 elsewhere in the backend, so this reuses the one that already exists rather
 than inventing a second. Advancement is never suspended.
+
+A wrong first attempt on most subtopics gets one same-question retry before
+the worked example appears (Questions items gain a transient `attempts`
+field for this — 0/absent until a retry is offered, then 1). A first-attempt
+correct counts toward the tier advance as normal; a second-attempt correct
+is tier-neutral (doesn't advance, doesn't demote, doesn't reset the advance
+streak); wrong twice resolves as a single miss, same as any wrong answer
+always has. `_SKIP_RETRY_ANSWER_TYPES` excludes subtopics where a second
+guess would be trivially easier than the first without requiring any real
+understanding — see that constant's comment.
 """
 
 from __future__ import annotations
@@ -42,6 +52,25 @@ _progress_table = boto3.resource("dynamodb").Table(os.environ["PROGRESS_TABLE"])
 _streaks_table = boto3.resource("dynamodb").Table(os.environ["STREAKS_TABLE"])
 
 _DEMOTION_SUSPENDED_AFTER_QUESTION = 10  # suspended from the 11th question of the day onward
+
+# Subtopics whose *coded* common wrong answer (axiom.*_generators'
+# common_wrong_answers) is a trivial resubmission away from the right one —
+# skip the retry there and go straight to the worked example.
+#
+# `inequalities`: the coded distractor (forgot_to_flip_sign) uses the exact
+# same threshold number as the correct answer, differing only in comparison
+# direction (< vs >) — she could flip the symbol and resubmit without any
+# new understanding.
+#
+# Considered and excluded: `perpendicular_lines`'s coded distractor
+# (mx_negative_one) changes *both* the slope and the back-solved intercept
+# relative to the correct answer — not a single flip on the same submitted
+# string — so a second guess there isn't materially easier than the first.
+_SKIP_RETRY_ANSWER_TYPES = {"inequality"}
+
+
+def _is_retry_eligible(answer_type: str) -> bool:
+    return answer_type not in _SKIP_RETRY_ANSWER_TYPES
 
 
 def _user_id(event: dict[str, Any]) -> str:
@@ -93,6 +122,48 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     today = datetime.now(timezone.utc).date()
     topic_id = question_item["topicId"]
+    is_second_attempt = bool(question_item.get("attempts"))
+
+    if not is_second_attempt and not correct and _is_retry_eligible(question_item["answerType"]):
+        _questions_table.update_item(
+            Key={"questionId": question_id},
+            UpdateExpression="SET attempts = :a",
+            ExpressionAttributeValues={":a": 1},
+        )
+        _attempts_table.put_item(
+            Item={
+                "userId": user_id,
+                "timestamp": str(time.time()),
+                "questionId": question_id,
+                "topicId": topic_id,
+                "subtopic": question_item["subtopic"],
+                "difficulty": question_item["difficulty"],
+                "correct": False,
+                "submittedAnswer": submitted,
+                "attemptNumber": 1,
+            }
+        )
+        # Nothing resolved yet — report current state unchanged, with no
+        # correct answer, no diagnostic offer, no indication of what was
+        # wrong. The frontend keeps showing this same question.
+        progress_item = _progress_table.get_item(Key={"userId": user_id, "topicId": topic_id}).get("Item")
+        streak_state = _streak_state_from_item(_streaks_table.get_item(Key={"userId": user_id}).get("Item"))
+        return _response(
+            200,
+            {
+                "correct": False,
+                "correctAnswer": None,
+                "secondAttemptAvailable": True,
+                "diagnosticOffer": None,
+                "progress": {
+                    "tier": (progress_item or {}).get("tier", "intro"),
+                    "introBadgeEarned": bool((progress_item or {}).get("introBadgeEarned", False)),
+                    "masteryBadgeEarned": bool((progress_item or {}).get("masteryBadgeEarned", False)),
+                },
+                "dailyStreak": streak_state.current_daily_streak,
+                "questionsToday": streak_state.questions_today,
+            },
+        )
 
     _attempts_table.put_item(
         Item={
@@ -104,6 +175,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "difficulty": question_item["difficulty"],
             "correct": correct,
             "submittedAnswer": submitted,
+            "attemptNumber": 2 if is_second_attempt else 1,
         }
     )
 
@@ -128,11 +200,17 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     _streaks_table.put_item(Item=new_streak_item)
 
     # --- tier, badges, topic progress ---
-    demotion_suspended = streak_state.questions_today > _DEMOTION_SUSPENDED_AFTER_QUESTION
     progress_item = _progress_table.get_item(Key={"userId": user_id, "topicId": topic_id}).get("Item")
-    tier_state = advance_after_answer(
-        _tier_state_from_item(progress_item), correct, demotion_suspended=demotion_suspended
-    )
+    if is_second_attempt and correct:
+        # Neutral: she got there on the second try, which is real, but it
+        # doesn't count toward the advance streak the way a first-attempt
+        # correct does, and it can't demote or reset anything either.
+        tier_state = _tier_state_from_item(progress_item)
+    else:
+        demotion_suspended = streak_state.questions_today > _DEMOTION_SUSPENDED_AFTER_QUESTION
+        tier_state = advance_after_answer(
+            _tier_state_from_item(progress_item), correct, demotion_suspended=demotion_suspended
+        )
 
     intro_badge_earned = bool((progress_item or {}).get("introBadgeEarned", False))
     mastery_streak_days = set((progress_item or {}).get("masteryStreakDays", []))
@@ -173,6 +251,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         {
             "correct": correct,
             "correctAnswer": question_item["answer"],
+            "secondAttemptAvailable": False,
             "diagnosticOffer": diagnostic_offer,
             "progress": {
                 "tier": tier_state.tier,

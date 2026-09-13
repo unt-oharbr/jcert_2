@@ -60,6 +60,12 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
   const previousTierByTopicRef = useRef<Record<string, string>>({})
   const tierMovementsThisBlockRef = useRef<string[]>([])
 
+  // True between a wrong first attempt (offered a retry) and whatever
+  // resolves it — so the visible "in a row" counter doesn't treat a
+  // second-attempt correct as a continuation of a hot streak, matching the
+  // backend's tier-neutral treatment of the same event.
+  const awaitingSecondAttemptRef = useRef(false)
+
   // After a correct answer, a fresh random question keeps the mix going.
   // After a wrong one, "another one like this" — same topic/subtopic — is
   // what actually lets her prove she's fixed the mistake, rather than
@@ -79,6 +85,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     setResult(null)
     setWorkedExample(null)
     setAnswer('')
+    awaitingSecondAttemptRef.current = false
     try {
       const retry = retrySameSubtopic && question ? { topicId: question.topicId, subtopic: question.subtopic } : undefined
       const next = await getNextQuestion(idToken, retry)
@@ -125,7 +132,18 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
     try {
       const outcome = await submitAnswer(idToken, question.questionId, answer.trim())
       setResult(outcome)
-      setCorrectStreak((n) => (outcome.correct ? n + 1 : 0))
+
+      const wasSecondAttempt = awaitingSecondAttemptRef.current
+      if (!outcome.correct && outcome.secondAttemptAvailable) {
+        awaitingSecondAttemptRef.current = true
+        setAnswer('') // clear the input for her retry; the question stays on screen
+      } else {
+        awaitingSecondAttemptRef.current = false
+      }
+      // A second-attempt correct is tier-neutral on the backend — the
+      // visible "in a row" count stays consistent with that rather than
+      // rewarding it like a first-attempt correct.
+      setCorrectStreak((n) => (outcome.correct && !wasSecondAttempt ? n + 1 : 0))
       lastQuestionsTodayRef.current = outcome.questionsToday
 
       const previousTier = previousTierByTopicRef.current[question.topicId]
@@ -247,7 +265,7 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
               anchorPoint={question.visualization.anchorPoint}
               relationshipMode={question.visualization.mode}
               displayMode={question.visualization.displayMode}
-              revealAnswer={Boolean(result)}
+              revealAnswer={Boolean(result && !result.secondAttemptAvailable)}
             />
           )}
 
@@ -261,6 +279,21 @@ export function SessionScreen({ idToken, onExit }: SessionScreenProps) {
               />
               <button type="submit">Submit</button>
             </form>
+          ) : result.secondAttemptAvailable ? (
+            <>
+              <p role="alert" className="feedback-wrong">
+                Not quite — try again.
+              </p>
+              <form onSubmit={handleSubmit} className="answer-row">
+                <input
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="Your answer"
+                  autoFocus
+                />
+                <button type="submit">Submit</button>
+              </form>
+            </>
           ) : result.correct ? (
             <>
               <p className="feedback-correct">Correct!</p>

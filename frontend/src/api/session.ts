@@ -28,7 +28,12 @@ export interface DiagnosticOffer {
 
 export interface AnswerResult {
   correct: boolean
-  correctAnswer: string
+  // null while a same-question retry is offered — nothing is resolved yet,
+  // so there is nothing to reveal.
+  correctAnswer: string | null
+  // True only on a wrong first attempt eligible for a retry: the question
+  // isn't resolved, nothing else in this response reflects a real change.
+  secondAttemptAvailable: boolean
   diagnosticOffer: DiagnosticOffer | null
   progress: {
     tier: string
